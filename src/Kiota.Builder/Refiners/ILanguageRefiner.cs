@@ -24,6 +24,9 @@ namespace Kiota.Builder.Refiners
                 case GenerationLanguage.Go:
                     new GoRefiner(config).Refine(generatedCode);
                     break;
+                case GenerationLanguage.Python:
+                    new PythonRefiner(config).Refine(generatedCode);
+                    break;
                 default:
                     break; //Do nothing
             }
