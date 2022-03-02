@@ -66,6 +66,12 @@ namespace Microsoft.Kiota.Serialization.Json
         public double? GetDoubleValue() => _jsonNode.GetDouble();
 
         /// <summary>
+        /// Get the decimal value from the json node
+        /// </summary>
+        /// <returns>A decimal value</returns>
+        public decimal? GetDecimalValue() => _jsonNode.GetDecimal();
+
+        /// <summary>
         /// Get the guid value from the json node
         /// </summary>
         /// <returns>A guid value</returns>
@@ -149,8 +155,9 @@ namespace Microsoft.Kiota.Serialization.Json
         /// <summary>
         /// Get the collection of type <typeparam name="T"/>from the json node
         /// </summary>
+        /// <param name="factory">The factory to use to create the model object.</param>
         /// <returns>A collection of objects</returns>
-        public IEnumerable<T> GetCollectionOfObjectValues<T>() where T : IParsable
+        public IEnumerable<T> GetCollectionOfObjectValues<T>(ParsableFactory<T> factory) where T : IParsable
         {
             var enumerator = _jsonNode.EnumerateArray();
             while(enumerator.MoveNext())
@@ -160,7 +167,7 @@ namespace Microsoft.Kiota.Serialization.Json
                     OnAfterAssignFieldValues = OnAfterAssignFieldValues,
                     OnBeforeAssignFieldValues = OnBeforeAssignFieldValues
                 };
-                yield return currentParseNode.GetObjectValue<T>();
+                yield return currentParseNode.GetObjectValue<T>(factory);
             }
         }
         /// <summary>
@@ -252,10 +259,11 @@ namespace Microsoft.Kiota.Serialization.Json
         /// <summary>
         /// Get the object of type <typeparam name="T"/>from the json node
         /// </summary>
+        /// <param name="factory">The factory to use to create the model object.</param>
         /// <returns>A object of the specified type</returns>
-        public T GetObjectValue<T>() where T : IParsable
+        public T GetObjectValue<T>(ParsableFactory<T> factory) where T : IParsable
         {
-            var item = (T)(typeof(T).GetConstructor(new Type[] { }).Invoke(new object[] { }));
+            var item = factory(this);
             var fieldDeserializers = item.GetFieldDeserializers<T>();
             OnBeforeAssignFieldValues?.Invoke(item);
             AssignFieldValues(item, fieldDeserializers);
