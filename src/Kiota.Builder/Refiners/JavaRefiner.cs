@@ -16,7 +16,7 @@ public class JavaRefiner : CommonLanguageRefiner, ILanguageRefiner
         RemoveCancellationParameter(generatedCode);
         ConvertUnionTypesToWrapper(generatedCode, _configuration.UsesBackingStore);
         AddRawUrlConstructorOverload(generatedCode);
-        CorrectCoreType(generatedCode, CorrectMethodType, CorrectPropertyType);
+        CorrectCoreType(generatedCode, CorrectMethodType, CorrectPropertyType, CorrectImplements);
         ReplaceBinaryByNativeType(generatedCode, "InputStream", "java.io", true);
         AddGetterAndSetterMethods(generatedCode,
             new() {
@@ -38,8 +38,16 @@ public class JavaRefiner : CommonLanguageRefiner, ILanguageRefiner
         SetSetterParametersToNullable(generatedCode, new Tuple<CodeMethodKind, CodePropertyKind>(CodeMethodKind.Setter, CodePropertyKind.AdditionalData));
         AddConstructorsForDefaultValues(generatedCode, true);
         CorrectCoreTypesForBackingStore(generatedCode, "BackingStoreFactorySingleton.instance.createBackingStore()");
-        ReplaceDefaultSerializationModules(generatedCode, "com.microsoft.kiota.serialization.JsonSerializationWriterFactory");
-        ReplaceDefaultDeserializationModules(generatedCode, "com.microsoft.kiota.serialization.JsonParseNodeFactory");
+        ReplaceDefaultSerializationModules(
+            generatedCode,
+            "com.microsoft.kiota.serialization.JsonSerializationWriterFactory",
+            "com.microsoft.kiota.serialization.TextSerializationWriterFactory"
+        );
+        ReplaceDefaultDeserializationModules(
+            generatedCode,
+            "com.microsoft.kiota.serialization.JsonParseNodeFactory",
+            "com.microsoft.kiota.serialization.TextParseNodeFactory"
+        );
         AddSerializationModulesImport(generatedCode,
                                     new [] { "com.microsoft.kiota.ApiClientBuilder",
                                             "com.microsoft.kiota.serialization.SerializationWriterFactoryRegistry" },
@@ -92,6 +100,8 @@ public class JavaRefiner : CommonLanguageRefiner, ILanguageRefiner
             "com.microsoft.kiota", "QueryParametersBase"),
         new (x => x is CodeClass @class && @class.IsOfKind(CodeClassKind.Model),
             "com.microsoft.kiota.serialization", "Parsable"),
+        new (x => x is CodeClass @class && @class.IsOfKind(CodeClassKind.Model) && @class.Properties.Any(x => x.IsOfKind(CodePropertyKind.AdditionalData)),
+            "com.microsoft.kiota.serialization", "AdditionalDataHolder"),
         new (x => x is CodeMethod method && method.Parameters.Any(x => !x.Optional),
                 "java.util", "Objects"),
         new (x => x is CodeMethod method && method.IsOfKind(CodeMethodKind.RequestExecutor) &&
@@ -105,7 +115,7 @@ public class JavaRefiner : CommonLanguageRefiner, ILanguageRefiner
         new (x => x is CodeMethod method && method.IsOfKind(CodeMethodKind.RequestExecutor),
             "com.microsoft.kiota.serialization", "Parsable", "ParsableFactory"),
         new (x => x is CodeMethod method && method.IsOfKind(CodeMethodKind.Deserializer),
-            "java.util.function", "BiConsumer"),
+            "java.util.function", "Consumer"),
         new (x => x is CodeMethod method && method.IsOfKind(CodeMethodKind.Deserializer),
             "java.util", "HashMap", "Map"),
         new (x => x is CodeMethod method && method.IsOfKind(CodeMethodKind.ClientConstructor) &&
@@ -113,6 +123,12 @@ public class JavaRefiner : CommonLanguageRefiner, ILanguageRefiner
             "com.microsoft.kiota.store", "BackingStoreFactory", "BackingStoreFactorySingleton"),
         new (x => x is CodeProperty prop && prop.IsOfKind(CodePropertyKind.BackingStore),
             "com.microsoft.kiota.store", "BackingStore", "BackedModel", "BackingStoreFactorySingleton"),
+        new (x => x is CodeProperty prop && "decimal".Equals(prop.Type.Name, StringComparison.OrdinalIgnoreCase) ||
+                x is CodeMethod method && "decimal".Equals(method.ReturnType.Name, StringComparison.OrdinalIgnoreCase) ||
+                x is CodeParameter para && "decimal".Equals(para.Type.Name, StringComparison.OrdinalIgnoreCase),
+            "java.math", "BigDecimal"),
+        new (x => x is CodeProperty prop && prop.IsOfKind(CodePropertyKind.QueryParameter) && !string.IsNullOrEmpty(prop.SerializationName),
+                "com.microsoft.kiota", "QueryParameter"),
     };
     private static void CorrectPropertyType(CodeProperty currentProperty) {
         if(currentProperty.IsOfKind(CodePropertyKind.RequestAdapter)) {
@@ -134,6 +150,9 @@ public class JavaRefiner : CommonLanguageRefiner, ILanguageRefiner
         } else
             CorrectDateTypes(currentProperty.Parent as CodeClass, DateTypesReplacements, currentProperty.Type);
     }
+    private static void CorrectImplements(ProprietableBlockDeclaration block) {
+        block.Implements.Where(x => "IAdditionalDataHolder".Equals(x.Name, StringComparison.OrdinalIgnoreCase)).ToList().ForEach(x => x.Name = x.Name[1..]); // skipping the I
+    }
     private static void CorrectMethodType(CodeMethod currentMethod) {
         if(currentMethod.IsOfKind(CodeMethodKind.RequestExecutor, CodeMethodKind.RequestGenerator)) {
             if(currentMethod.IsOfKind(CodeMethodKind.RequestExecutor))
@@ -148,7 +167,7 @@ public class JavaRefiner : CommonLanguageRefiner, ILanguageRefiner
                     x.Type.Name = x.Type.Name[1..];
             });
         else if(currentMethod.IsOfKind(CodeMethodKind.Deserializer)) {
-            currentMethod.ReturnType.Name = $"Map<String, BiConsumer<T, ParseNode>>";
+            currentMethod.ReturnType.Name = $"Map<String, Consumer<ParseNode>>";
             currentMethod.Name = "getFieldDeserializers";
         }
         else if(currentMethod.IsOfKind(CodeMethodKind.ClientConstructor, CodeMethodKind.Constructor, CodeMethodKind.RawUrlConstructor)) {

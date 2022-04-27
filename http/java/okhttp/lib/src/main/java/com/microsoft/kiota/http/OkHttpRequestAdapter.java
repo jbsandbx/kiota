@@ -2,13 +2,16 @@ package com.microsoft.kiota.http;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.time.OffsetDateTime;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.Period;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.StringJoiner;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -31,6 +34,7 @@ import com.microsoft.kiota.serialization.SerializationWriterFactoryRegistry;
 import com.microsoft.kiota.store.BackingStoreFactory;
 import com.microsoft.kiota.store.BackingStoreFactorySingleton;
 
+import kotlin.OptIn;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -103,6 +107,9 @@ public class OkHttpRequestAdapter implements com.microsoft.kiota.RequestAdapter 
             if(responseHandler == null) {
                 try {
                     this.throwFailedResponse(response, errorMappings);
+                    if(this.shouldReturnNull(response)) {
+                        return CompletableFuture.completedStage(null);
+                    }
                     final ParseNode rootNode = getRootParseNode(response);
                     final Iterable<ModelType> result = rootNode.getCollectionOfObjectValues(factory);
                     return CompletableFuture.completedStage(result);
@@ -128,6 +135,9 @@ public class OkHttpRequestAdapter implements com.microsoft.kiota.RequestAdapter 
             if(responseHandler == null) {
                 try {
                     this.throwFailedResponse(response, errorMappings);
+                    if(this.shouldReturnNull(response)) {
+                        return CompletableFuture.completedStage(null);
+                    }
                     final ParseNode rootNode = getRootParseNode(response);
                     final ModelType result = rootNode.getObjectValue(factory);
                     return CompletableFuture.completedStage(result);
@@ -153,6 +163,9 @@ public class OkHttpRequestAdapter implements com.microsoft.kiota.RequestAdapter 
             if(responseHandler == null) {
                 try {
                     this.throwFailedResponse(response, errorMappings);
+                    if(this.shouldReturnNull(response)) {
+                        return CompletableFuture.completedStage(null);
+                    }
                     if(targetClass == Void.class) {
                         return CompletableFuture.completedStage(null);
                     } else {
@@ -165,8 +178,16 @@ public class OkHttpRequestAdapter implements com.microsoft.kiota.RequestAdapter 
                         Object result;
                         if(targetClass == Boolean.class) {
                             result = rootNode.getBooleanValue();
+                        } else if(targetClass == Byte.class) {
+                            result = rootNode.getByteValue();
                         } else if(targetClass == String.class) {
                             result = rootNode.getStringValue();
+                        } else if(targetClass == Short.class) {
+                            result = rootNode.getShortValue();
+                        } else if(targetClass == BigDecimal.class) {
+                            result = rootNode.getBigDecimalValue();
+                        } else if(targetClass == Double.class) {
+                            result = rootNode.getDoubleValue();
                         } else if(targetClass == Integer.class) {
                             result = rootNode.getIntegerValue();
                         } else if(targetClass == Float.class) {
@@ -177,6 +198,14 @@ public class OkHttpRequestAdapter implements com.microsoft.kiota.RequestAdapter 
                             result = rootNode.getUUIDValue();
                         } else if(targetClass == OffsetDateTime.class) {
                             result = rootNode.getOffsetDateTimeValue();
+                        } else if(targetClass == LocalDate.class) {
+                            result = rootNode.getLocalDateValue();
+                        } else if(targetClass == LocalTime.class) {
+                            result = rootNode.getLocalTimeValue();
+                        } else if(targetClass == Period.class) {
+                            result = rootNode.getPeriodValue();
+                        } else if(targetClass == byte[].class) {
+                            result = rootNode.getByteArrayValue();
                         } else {
                             throw new RuntimeException("unexpected payload type " + targetClass.getName());
                         }
@@ -202,6 +231,9 @@ public class OkHttpRequestAdapter implements com.microsoft.kiota.RequestAdapter 
             if(responseHandler == null) {
                 try {
                     this.throwFailedResponse(response, errorMappings);
+                    if(this.shouldReturnNull(response)) {
+                        return CompletableFuture.completedStage(null);
+                    }
                     final ParseNode rootNode = getRootParseNode(response);
                     final Iterable<ModelType> result = rootNode.getCollectionOfPrimitiveValues(targetClass);
                     return CompletableFuture.completedStage(result);
@@ -223,6 +255,10 @@ public class OkHttpRequestAdapter implements com.microsoft.kiota.RequestAdapter 
             final ParseNode rootNode = pNodeFactory.getParseNode(getMediaTypeAndSubType(body.contentType()), rawInputStream);
             return rootNode;
         }
+    }
+    private boolean shouldReturnNull(final Response response) {
+        final int statusCode = response.code();
+        return statusCode == 204;
     }
     private Response throwFailedResponse(final Response response, final HashMap<String, ParsableFactory<? extends Parsable>> errorMappings) throws IOException, ApiException {
         if (response.isSuccessful()) return response;
@@ -298,8 +334,9 @@ public class OkHttpRequestAdapter implements com.microsoft.kiota.RequestAdapter 
         for (final Map.Entry<String,String> header : requestInfo.headers.entrySet()) {
             requestBuilder.addHeader(header.getKey(), header.getValue());
         }
+
         for(final RequestOption option : requestInfo.getRequestOptions()) {
-            requestBuilder.tag(option);
+            requestBuilder.tag(option.getType(), option);
         }
         return requestBuilder.build();
     }

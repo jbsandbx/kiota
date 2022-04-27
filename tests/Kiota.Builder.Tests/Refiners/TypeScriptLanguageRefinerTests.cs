@@ -17,6 +17,26 @@ public class TypeScriptLanguageRefinerTests {
     }
 #region commonrefiner
     [Fact]
+    public void AddsQueryParameterMapperMethod() {
+        var model = graphNS.AddClass(new CodeClass {
+            Name = "somemodel",
+            Kind = CodeClassKind.QueryParameters,
+        }).First();
+
+        model.AddProperty(new CodeProperty {
+            Name = "Select",
+            SerializationName = "%24select",
+            Type = new CodeType {
+                Name = "string"
+            },
+        });
+
+        Assert.Empty(model.Methods);
+
+        ILanguageRefiner.Refine(new GenerationConfiguration { Language = GenerationLanguage.TypeScript }, graphNS);
+        Assert.Single(model.Methods.Where(x => x.IsOfKind(CodeMethodKind.QueryParametersMapper)));
+    }
+    [Fact]
     public void AddStaticMethodsUsingsForDeserializer() {
         var model = graphNS.AddClass(new CodeClass {
             Name = "somemodel",
@@ -118,7 +138,7 @@ public class TypeScriptLanguageRefinerTests {
                 Name = "string"
             },
         }).First();
-        requestExecutor.ErrorMappings.TryAdd("4XX", new CodeType {
+        requestExecutor.AddErrorMapping("4XX", new CodeType {
                         Name = "Error4XX",
                         TypeDefinition = errorClass,
                     });
@@ -151,7 +171,7 @@ public class TypeScriptLanguageRefinerTests {
             },
             IsStatic = true,
         }).First();
-        factoryMethod.DiscriminatorMappings.TryAdd("ns.childmodel", new CodeType {
+        factoryMethod.AddDiscriminatorMapping("ns.childmodel", new CodeType {
                         Name = "childModel",
                         TypeDefinition = childModel,
                     });

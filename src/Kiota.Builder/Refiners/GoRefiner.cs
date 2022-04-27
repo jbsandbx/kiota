@@ -29,13 +29,10 @@ public class GoRefiner : CommonLanguageRefiner
             generatedCode,
             _configuration.UsesBackingStore
         );
-        AddNullCheckMethods(
-            generatedCode
-        );
         AddRawUrlConstructorOverload(
             generatedCode
         );
-        MoveAllModelsToTopLevel(
+        RemoveModelPropertiesThatDependOnSubNamespaces(
             generatedCode
         );
         ReplaceReservedNames(
@@ -57,7 +54,8 @@ public class GoRefiner : CommonLanguageRefiner
         CorrectCoreType(
             generatedCode,
             CorrectMethodType,
-            CorrectPropertyType);
+            CorrectPropertyType,
+            CorrectImplements);
         PatchHeaderParametersType(
             generatedCode,
             "map[string]string");
@@ -73,27 +71,30 @@ public class GoRefiner : CommonLanguageRefiner
             "Set");
         AddConstructorsForDefaultValues(
             generatedCode,
-            true);
+            true,
+            true); //forcing add as constructors are required for by factories
         MakeModelPropertiesNullable(
             generatedCode);
         AddErrorImportForEnums(
             generatedCode);
         ReplaceDefaultSerializationModules(
             generatedCode,
-            "github.com/microsoft/kiota/serialization/go/json.JsonSerializationWriterFactory");
+            "github.com/microsoft/kiota-serialization-json-go.JsonSerializationWriterFactory",
+            "github.com/microsoft/kiota-serialization-text-go.TextSerializationWriterFactory");
         ReplaceDefaultDeserializationModules(
             generatedCode,
-            "github.com/microsoft/kiota/serialization/go/json.JsonParseNodeFactory");
+            "github.com/microsoft/kiota-serialization-json-go.JsonParseNodeFactory",
+            "github.com/microsoft/kiota-serialization-text-go.TextParseNodeFactory");
         AddSerializationModulesImport(
             generatedCode,
-            new string[] {"github.com/microsoft/kiota/abstractions/go/serialization.SerializationWriterFactory", "github.com/microsoft/kiota/abstractions/go.RegisterDefaultSerializer"},
-            new string[] {"github.com/microsoft/kiota/abstractions/go/serialization.ParseNodeFactory", "github.com/microsoft/kiota/abstractions/go.RegisterDefaultDeserializer"});
+            new string[] {"github.com/microsoft/kiota-abstractions-go/serialization.SerializationWriterFactory", "github.com/microsoft/kiota-abstractions-go.RegisterDefaultSerializer"},
+            new string[] {"github.com/microsoft/kiota-abstractions-go/serialization.ParseNodeFactory", "github.com/microsoft/kiota-abstractions-go.RegisterDefaultDeserializer"});
         ReplaceExecutorAndGeneratorParametersByParameterSets(
             generatedCode);
         AddParentClassToErrorClasses(
                 generatedCode,
                 "ApiError",
-                "github.com/microsoft/kiota/abstractions/go"
+                "github.com/microsoft/kiota-abstractions-go"
         );
         AddDiscriminatorMappingsUsingsToParentClasses(
             generatedCode,
@@ -106,7 +107,6 @@ public class GoRefiner : CommonLanguageRefiner
         );
         CopyModelClassesAsInterfaces(
             generatedCode,
-            _configuration,
             x => $"{x.Name}able"
         );
     }
@@ -167,39 +167,28 @@ public class GoRefiner : CommonLanguageRefiner
             }
         CrawlTree(currentElement, ReplaceExecutorAndGeneratorParametersByParameterSets);
     }
-    private static void AddNullCheckMethods(CodeElement currentElement) {
-        if(currentElement is CodeClass currentClass && currentClass.IsOfKind(CodeClassKind.Model)) {
-            currentClass.AddMethod(new CodeMethod {
-                Name = "IsNil",
-                IsAsync = false,
-                Kind = CodeMethodKind.NullCheck,
-                ReturnType = new CodeType {
-                    Name = "boolean",
-                    IsExternal = true,
-                    IsNullable = false,
-                },
-            });
-        }
-        CrawlTree(currentElement, AddNullCheckMethods);
-    }
-    private static void MoveAllModelsToTopLevel(CodeElement currentElement, CodeNamespace targetNamespace = null) {
-        if(currentElement is CodeNamespace currentNamespace) {
-            if(targetNamespace == null) {
-                var rootModels = FindRootModelsNamespace(currentNamespace);
-                targetNamespace = FindFirstModelSubnamepaceWithClasses(rootModels);
+    private static void RemoveModelPropertiesThatDependOnSubNamespaces(CodeElement currentElement) {
+        if(currentElement is CodeClass currentClass && 
+            currentClass.IsOfKind(CodeClassKind.Model) &&
+            currentClass.Parent is CodeNamespace currentNamespace) {
+            var propertiesToRemove = currentClass.Properties
+                                                    .Where(x => x.IsOfKind(CodePropertyKind.Custom) &&
+                                                                x.Type is CodeType pType &&
+                                                                !pType.IsExternal &&
+                                                                pType.TypeDefinition != null &&
+                                                                currentNamespace.IsParentOf(pType.TypeDefinition.GetImmediateParentOfType<CodeNamespace>()))
+                                                    .ToArray();
+            if(propertiesToRemove.Any()) {
+                currentClass.RemoveChildElement(propertiesToRemove);
+                var propertiesToRemoveHashSet = propertiesToRemove.ToHashSet();
+                var methodsToRemove = currentClass.Methods
+                                                    .Where(x => x.IsAccessor &&
+                                                            propertiesToRemoveHashSet.Contains(x.AccessedProperty))
+                                                    .ToArray();
+                currentClass.RemoveChildElement(methodsToRemove);
             }
-            if(currentNamespace != targetNamespace &&
-                !string.IsNullOrEmpty(currentNamespace?.Name) &&
-                !string.IsNullOrEmpty(targetNamespace?.Name) &&
-                currentNamespace.Name.Contains(targetNamespace.Name, StringComparison.OrdinalIgnoreCase)) {
-                foreach (var codeClass in currentNamespace.Classes)
-                {
-                    currentNamespace.RemoveChildElement(codeClass);
-                    targetNamespace.AddClass(codeClass);
-                }
-            }
-            CrawlTree(currentElement, x => MoveAllModelsToTopLevel(x, targetNamespace));
         }
+        CrawlTree(currentElement, RemoveModelPropertiesThatDependOnSubNamespaces);
     }
     private static CodeNamespace FindFirstModelSubnamepaceWithClasses(CodeNamespace currentNamespace) {
         if(currentNamespace != null) {
@@ -263,23 +252,30 @@ public class GoRefiner : CommonLanguageRefiner
     };
     private static readonly AdditionalUsingEvaluator[] defaultUsingEvaluators = new AdditionalUsingEvaluator[] { 
         new (x => x is CodeProperty prop && prop.IsOfKind(CodePropertyKind.RequestAdapter),
-            "github.com/microsoft/kiota/abstractions/go", "RequestAdapter"),
+            "github.com/microsoft/kiota-abstractions-go", "RequestAdapter"),
         new (x => x is CodeMethod method && method.IsOfKind(CodeMethodKind.RequestGenerator),
-            "github.com/microsoft/kiota/abstractions/go", "RequestInformation", "HttpMethod", "RequestOption"),
+            "github.com/microsoft/kiota-abstractions-go", "RequestInformation", "HttpMethod", "RequestOption"),
         new (x => x is CodeMethod method && method.IsOfKind(CodeMethodKind.RequestExecutor),
-            "github.com/microsoft/kiota/abstractions/go", "ResponseHandler"),
+            "github.com/microsoft/kiota-abstractions-go", "ResponseHandler"),
         new (x => x is CodeMethod method && method.IsOfKind(CodeMethodKind.Constructor) &&
                     method.Parameters.Any(x => x.IsOfKind(CodeParameterKind.Path) &&
                                             !typeToSkipStrConv.Contains(x.Type.Name)),
             "strconv", "FormatBool"),
         new (x => x is CodeMethod method && method.IsOfKind(CodeMethodKind.Serializer),
-            "github.com/microsoft/kiota/abstractions/go/serialization", "SerializationWriter"),
+            "github.com/microsoft/kiota-abstractions-go/serialization", "SerializationWriter"),
         new (x => x is CodeMethod method && method.IsOfKind(CodeMethodKind.Deserializer, CodeMethodKind.Factory),
-            "github.com/microsoft/kiota/abstractions/go/serialization", "ParseNode", "Parsable"),
+            "github.com/microsoft/kiota-abstractions-go/serialization", "ParseNode", "Parsable"),
         new (x => x is CodeClass codeClass && codeClass.IsOfKind(CodeClassKind.Model),
-            "github.com/microsoft/kiota/abstractions/go/serialization", "Parsable"),
+            "github.com/microsoft/kiota-abstractions-go/serialization", "Parsable"),
+        new (x => x is CodeClass @class && @class.IsOfKind(CodeClassKind.Model) && 
+                                            (@class.Properties.Any(x => x.IsOfKind(CodePropertyKind.AdditionalData)) ||
+                                            @class.StartBlock.Implements.Any(x => KiotaBuilder.AdditionalHolderInterface.Equals(x.Name, StringComparison.OrdinalIgnoreCase))),
+            "github.com/microsoft/kiota-abstractions-go/serialization", "AdditionalDataHolder"),
         new (x => x is CodeEnum num, "ToUpper", "strings"),
     };//TODO add backing store types once we have them defined
+    private static void CorrectImplements(ProprietableBlockDeclaration block) {
+        block.ReplaceImplementByName(KiotaBuilder.AdditionalHolderInterface, "AdditionalDataHolder");
+    }
     private static void CorrectMethodType(CodeMethod currentMethod) {
         var parentClass = currentMethod.Parent as CodeClass;
         if(currentMethod.IsOfKind(CodeMethodKind.RequestExecutor, CodeMethodKind.RequestGenerator) &&
@@ -301,7 +297,7 @@ public class GoRefiner : CommonLanguageRefiner
         else if(currentMethod.IsOfKind(CodeMethodKind.Serializer))
             currentMethod.Parameters.Where(x => x.Type.Name.Equals("ISerializationWriter")).ToList().ForEach(x => x.Type.Name = "SerializationWriter");
         else if(currentMethod.IsOfKind(CodeMethodKind.Deserializer)) {
-            currentMethod.ReturnType.Name = $"map[string]func(interface{{}}, {conventions.SerializationHash}.ParseNode)(error)";
+            currentMethod.ReturnType.Name = $"map[string]func({conventions.SerializationHash}.ParseNode)(error)";
             currentMethod.Name = "getFieldDeserializers";
         } else if(currentMethod.IsOfKind(CodeMethodKind.ClientConstructor, CodeMethodKind.Constructor, CodeMethodKind.RawUrlConstructor)) {
             var rawUrlParam = currentMethod.Parameters.OfKind(CodeParameterKind.RawUrl);
@@ -333,21 +329,21 @@ public class GoRefiner : CommonLanguageRefiner
         {"TimeSpan", ("ISODuration", new CodeUsing {
                                         Name = "ISODuration",
                                         Declaration = new CodeType {
-                                            Name = "github.com/microsoft/kiota/abstractions/go/serialization",
+                                            Name = "github.com/microsoft/kiota-abstractions-go/serialization",
                                             IsExternal = true,
                                         },
                                     })},
         {"DateOnly", (null, new CodeUsing {
                                 Name = "DateOnly",
                                 Declaration = new CodeType {
-                                    Name = "github.com/microsoft/kiota/abstractions/go/serialization",
+                                    Name = "github.com/microsoft/kiota-abstractions-go/serialization",
                                     IsExternal = true,
                                 },
                             })},
         {"TimeOnly", (null, new CodeUsing {
                                 Name = "TimeOnly",
                                 Declaration = new CodeType {
-                                    Name = "github.com/microsoft/kiota/abstractions/go/serialization",
+                                    Name = "github.com/microsoft/kiota-abstractions-go/serialization",
                                     IsExternal = true,
                                 },
                             })},

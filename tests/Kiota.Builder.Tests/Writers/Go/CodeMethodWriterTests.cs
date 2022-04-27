@@ -182,9 +182,9 @@ public class CodeMethodWriterTests : IDisposable {
         var error401 = root.AddClass(new CodeClass{
             Name = "Error401",
         }).First();
-        method.ErrorMappings.TryAdd("4XX", new CodeType {Name = "Error4XX", TypeDefinition = error4XX});
-        method.ErrorMappings.TryAdd("5XX", new CodeType {Name = "Error5XX", TypeDefinition = error5XX});
-        method.ErrorMappings.TryAdd("403", new CodeType {Name = "Error403", TypeDefinition = error401});
+        method.AddErrorMapping("4XX", new CodeType {Name = "Error4XX", TypeDefinition = error4XX});
+        method.AddErrorMapping("5XX", new CodeType {Name = "Error5XX", TypeDefinition = error5XX});
+        method.AddErrorMapping("403", new CodeType {Name = "Error403", TypeDefinition = error401});
         AddRequestBodyParameters();
         writer.Write(method);
         var result = tw.ToString();
@@ -232,7 +232,7 @@ public class CodeMethodWriterTests : IDisposable {
             },
             IsStatic = true,
         }).First();
-        factoryMethod.DiscriminatorMappings.TryAdd("ns.childmodel", new CodeType {
+        factoryMethod.AddDiscriminatorMapping("ns.childmodel", new CodeType {
                         Name = "childModel",
                         TypeDefinition = childModel,
                     });
@@ -285,7 +285,7 @@ public class CodeMethodWriterTests : IDisposable {
             },
             IsStatic = true,
         }).First();
-        factoryMethod.DiscriminatorMappings.TryAdd("ns.childmodel", new CodeType {
+        factoryMethod.AddDiscriminatorMapping("ns.childmodel", new CodeType {
                         Name = "childModel",
                         TypeDefinition = childModel,
                     });
@@ -326,7 +326,7 @@ public class CodeMethodWriterTests : IDisposable {
             },
             IsStatic = true,
         }).First();
-        factoryMethod.DiscriminatorMappings.TryAdd("ns.childmodel", new CodeType {
+        factoryMethod.AddDiscriminatorMapping("ns.childmodel", new CodeType {
                         Name = "childModel",
                         TypeDefinition = childModel,
                     });
@@ -397,7 +397,7 @@ public class CodeMethodWriterTests : IDisposable {
         Assert.Contains("return NewParentModel(), nil", result);
         AssertExtensions.CurlyBracesAreClosed(result);
     }
-    private const string AbstractionsPackageHash = "ida96af0f171bb75f894a4013a6b3146a4397c58f11adb81a2b7cbea9314783a9";
+    private const string AbstractionsPackageHash = "i2ae4187f7daee263371cb1c977df639813ab50ffa529013b7437480d1ec0158f";
     [Fact]
     public void WritesRequestGeneratorBody() {
         var configurationMock = new Mock<GenerationConfiguration>();
@@ -580,7 +580,7 @@ public class CodeMethodWriterTests : IDisposable {
         method.Kind = CodeMethodKind.IndexerBackwardCompatibility;
         method.OriginalIndexer = new () {
             Name = "indx",
-            ParameterName = "id",
+            SerializationName = "id",
             IndexType = new CodeType {
                 Name = "string",
                 IsNullable = true,
@@ -710,6 +710,7 @@ public class CodeMethodWriterTests : IDisposable {
         var result = tw.ToString();
         Assert.Contains(parentClass.Name.ToFirstCharacterUpperCase(), result);
         Assert.Contains($"m.{propName} = {defaultValue}", result);
+        Assert.Contains("m.pathParameters = urlTplParams", result);
         Assert.Contains("make(map[string]string)", result);
     }
     [Fact]

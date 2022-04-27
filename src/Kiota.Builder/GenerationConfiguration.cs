@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Kiota.Builder {
     public class GenerationConfiguration {
@@ -10,8 +11,7 @@ namespace Kiota.Builder {
         public string ModelsNamespaceName { get => $"{ClientNamespaceName}{NamespaceNameSeparator}models"; }
         public GenerationLanguage Language { get; set; } = GenerationLanguage.CSharp;
         public string ApiRootUrl { get; set; }
-        public List<string> PropertiesPrefixToStrip { get; set; } = new() { "@odata."};
-        public HashSet<string> IgnoredRequestContentTypes { get; set; } = new();
+        public string[] PropertiesPrefixToStrip { get; set; } = new string[] { "@odata."};
         public bool UsesBackingStore { get; set; }
         public List<string> Serializers { get; set; } = new();
         public List<string> Deserializers { get; set; } = new();
@@ -23,10 +23,12 @@ namespace Kiota.Builder {
         };
         private static readonly HashSet<GenerationLanguage> BarreledLanguages = new () {
             GenerationLanguage.Ruby,
-            // TODO: add typescript once we have a barrel writer for it
+            GenerationLanguage.TypeScript,
+            GenerationLanguage.Swift,
         };
         private static readonly HashSet<GenerationLanguage> BarreledLanguagesWithConstantFileName = new () {
-            //TODO: add typescript once we have a barrel writer for it
+            GenerationLanguage.TypeScript
         };
+        public bool CleanOutput { get; set;}
     }
 }

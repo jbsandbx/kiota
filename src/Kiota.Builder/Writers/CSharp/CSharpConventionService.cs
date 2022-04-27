@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Kiota.Builder.Extensions;
@@ -9,13 +9,13 @@ namespace Kiota.Builder.Writers.CSharp {
         public override string StreamTypeName => "stream";
         public override string VoidTypeName => "void";
         public override string DocCommentPrefix => "/// ";
-        private static readonly HashSet<string> NullableTypes = new(StringComparer.OrdinalIgnoreCase) { "int", "bool", "float", "double", "decimal", "long", "Guid", "DateTimeOffset", "TimeSpan", "Date","Time" };
+        private static readonly HashSet<string> NullableTypes = new(StringComparer.OrdinalIgnoreCase) { "int", "bool", "float", "double", "decimal", "long", "Guid", "DateTimeOffset", "TimeSpan", "Date","Time", "sbyte", "byte" };
         public static readonly char NullableMarker = '?';
         public static string NullableMarkerAsString => "?";
         public override string ParseNodeInterfaceName => "IParseNode";
         public override void WriteShortDescription(string description, LanguageWriter writer) {
             if(!string.IsNullOrEmpty(description))
-                writer.WriteLine($"{DocCommentPrefix}<summary>{description}</summary>");
+                writer.WriteLine($"{DocCommentPrefix}<summary>{description.CleanupXMLString()}</summary>");
         }
         public override string GetAccessModifier(AccessModifier access)
         {
@@ -94,10 +94,14 @@ namespace Kiota.Builder.Writers.CSharp {
                 parentElements.AddRange(parentClass.Methods.Select(x => x.Name).Union(parentClass.Properties.Select(x => x.Name)));
             var parentElementsHash = new HashSet<string>(parentElements, StringComparer.OrdinalIgnoreCase);
             var typeName = TranslateType(currentType);
-            if(currentType.TypeDefinition != null &&
-                GetNamesInUseByNamespaceSegments(targetElement).Contains(typeName) &&
-                !DoesTypeExistsInSameNamesSpaceAsTarget(currentType,targetElement) ||
-                parentElementsHash.Contains(typeName))
+            var areElementsInSameNamesSpace = DoesTypeExistsInSameNamesSpaceAsTarget(currentType, targetElement);
+            if (currentType.TypeDefinition != null &&
+                    (
+                        GetNamesInUseByNamespaceSegments(targetElement).Contains(typeName) && !areElementsInSameNamesSpace         // match if elements are not in the same namespace and the type name is used in the namespace segments
+                    ||  parentElementsHash.Contains(typeName)                                                                   // match if type name is used in the parent elements segments
+                    ||  !areElementsInSameNamesSpace && DoesTypeExistsInTargetAncestorNamespace(currentType, targetElement)     // match if elements are not in the same namespace and the type exists in target ancestor namespace
+                    )
+                )
                 return $"{currentType.TypeDefinition.GetImmediateParentOfType<CodeNamespace>().Name}.{typeName}";
             else
                 return typeName;
@@ -107,6 +111,27 @@ namespace Kiota.Builder.Writers.CSharp {
         {
             return currentType?.TypeDefinition?.GetImmediateParentOfType<CodeNamespace>()?.Name.Equals(targetElement?.GetImmediateParentOfType<CodeNamespace>()?.Name) ?? false;
         }
+
+        private static bool DoesTypeExistsInTargetAncestorNamespace(CodeType currentType, CodeElement targetElement)
+        {
+            // Avoid type ambiguity on similarly named classes. Currently, if we have namespaces A and A.B where both namespaces have type T,
+            // Trying to use type A.B.T in namespace A without using a qualified name will break the build.
+            // Similarly, if we have type A.B.C.D.T1 that needs to be used within type A.B.C.T2, but there's also a type
+            // A.B.T1, using T1 in T2 will resolve A.B.T1 even if you have a using statement with A.B.C.D.
+            var hasChildWithName = false;
+            if (currentType != null && currentType.TypeDefinition != null && !currentType.IsExternal && targetElement != null)
+            {
+                var typeName = currentType.TypeDefinition.Name;
+                var ns = targetElement.GetImmediateParentOfType<CodeNamespace>();
+                var rootNs = ns?.GetRootNamespace();
+                while (ns is not null && ns != rootNs && !hasChildWithName)
+                {
+                    hasChildWithName = ns.GetChildElements(true).OfType<CodeClass>().Any(c => c.Name?.Equals(typeName) == true);
+                    ns = ns.Parent is CodeNamespace n ? n : (ns.GetImmediateParentOfType<CodeNamespace>());
+                }
+            }
+            return hasChildWithName;
+        }
         public override string TranslateType(CodeType type)
         {
             return type.Name switch
@@ -114,7 +139,7 @@ namespace Kiota.Builder.Writers.CSharp {
                 "integer" => "int",
                 "boolean" => "bool",
                 "int64" => "long",
-                "string" or "float" or "double" or "object" or "void" or "decimal" => type.Name.ToLowerInvariant(),// little casing hack
+                "string" or "float" or "double" or "object" or "void" or "decimal" or "sbyte" or "byte" => type.Name.ToLowerInvariant(),// little casing hack
                 "binary" => "byte[]",
                 _ => type.Name?.ToFirstCharacterUpperCase() ?? "object",
             };

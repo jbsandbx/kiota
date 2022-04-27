@@ -8,19 +8,26 @@
     },
     "cSpell.ignoreWords": [
         "Todos",
+        "azidentity",
+        "getme",
         "gson",
         "kiotaabstractions",
         "msgraph",
         "okhttp",
         "okhttp3",
-        "squareup"
+        "okhttplibrary",
+        "println",
+        "squareup",
+        "todoclient"
     ],
     "cSpell.words": [
         "deserialization",
+        "getenv",
         "Kiota",
         "npmrc",
         "openapi",
         "serializers"
     ],
-    "java.configuration.updateBuildConfiguration": "automatic"
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "dotnet-test-explorer.testProjectPath": "tests/**/*.Tests.csproj"
 }

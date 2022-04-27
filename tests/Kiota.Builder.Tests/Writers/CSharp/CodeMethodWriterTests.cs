@@ -85,21 +85,25 @@ public class CodeMethodWriterTests : IDisposable {
         var dummyComplexCollection = parentClass.AddProperty(new CodeProperty {
             Name = "dummyComplexColl"
         }).First();
+        var complexTypeClass = root.AddClass(new CodeClass
+        {
+            Name = "SomeComplexType"
+        }).First();
         dummyComplexCollection.Type = new CodeType {
             Name = "Complex",
             CollectionKind = CodeTypeBase.CodeTypeCollectionKind.Array,
-            TypeDefinition = new CodeClass {
-                Name = "SomeComplexType"
-            }
+            TypeDefinition = complexTypeClass
         };
         var dummyEnumProp = parentClass.AddProperty(new CodeProperty{
             Name = "dummyEnumCollection",
         }).First();
+        var enumDefinition = root.AddEnum(new CodeEnum
+        {
+            Name = "EnumType"
+        }).First();
         dummyEnumProp.Type = new CodeType {
             Name = "SomeEnum",
-            TypeDefinition = new CodeEnum {
-                Name = "EnumType"
-            }
+            TypeDefinition = enumDefinition
         };
     }
     private void AddInheritanceClass() {
@@ -168,9 +172,9 @@ public class CodeMethodWriterTests : IDisposable {
         var error401 = root.AddClass(new CodeClass{
             Name = "Error401",
         }).First();
-        method.ErrorMappings.TryAdd("4XX", new CodeType {Name = "Error4XX", TypeDefinition = error4XX});
-        method.ErrorMappings.TryAdd("5XX", new CodeType {Name = "Error5XX", TypeDefinition = error5XX});
-        method.ErrorMappings.TryAdd("403", new CodeType {Name = "Error403", TypeDefinition = error401});
+        method.AddErrorMapping("4XX", new CodeType {Name = "Error4XX", TypeDefinition = error4XX});
+        method.AddErrorMapping("5XX", new CodeType {Name = "Error5XX", TypeDefinition = error5XX});
+        method.AddErrorMapping("403", new CodeType {Name = "Error403", TypeDefinition = error401});
         AddRequestBodyParameters();
         writer.Write(method);
         var result = tw.ToString();
@@ -220,7 +224,7 @@ public class CodeMethodWriterTests : IDisposable {
             },
             IsStatic = true,
         }).First();
-        factoryMethod.DiscriminatorMappings.TryAdd("ns.childmodel", new CodeType {
+        factoryMethod.AddDiscriminatorMapping("ns.childmodel", new CodeType {
                         Name = "childModel",
                         TypeDefinition = childModel,
                     });
@@ -230,9 +234,6 @@ public class CodeMethodWriterTests : IDisposable {
             Kind = CodeParameterKind.ParseNode,
             Type = new CodeType {
                 Name = "ParseNode",
-                TypeDefinition = new CodeClass {
-                    Name = "ParseNode",
-                },
                 IsExternal = true,
             },
             Optional = false,
@@ -269,7 +270,7 @@ public class CodeMethodWriterTests : IDisposable {
             },
             IsStatic = true,
         }).First();
-        factoryMethod.DiscriminatorMappings.TryAdd("ns.childmodel", new CodeType {
+        factoryMethod.AddDiscriminatorMapping("ns.childmodel", new CodeType {
                         Name = "childModel",
                         TypeDefinition = childModel,
                     });
@@ -306,7 +307,7 @@ public class CodeMethodWriterTests : IDisposable {
             },
             IsStatic = true,
         }).First();
-        factoryMethod.DiscriminatorMappings.TryAdd("ns.childmodel", new CodeType {
+        factoryMethod.AddDiscriminatorMapping("ns.childmodel", new CodeType {
                         Name = "childModel",
                         TypeDefinition = childModel,
                     });
@@ -316,9 +317,6 @@ public class CodeMethodWriterTests : IDisposable {
             Kind = CodeParameterKind.ParseNode,
             Type = new CodeType {
                 Name = "ParseNode",
-                TypeDefinition = new CodeClass {
-                    Name = "ParseNode",
-                },
                 IsExternal = true,
             },
             Optional = false,
@@ -353,9 +351,6 @@ public class CodeMethodWriterTests : IDisposable {
             Kind = CodeParameterKind.ParseNode,
             Type = new CodeType {
                 Name = "ParseNode",
-                TypeDefinition = new CodeClass {
-                    Name = "ParseNode",
-                },
                 IsExternal = true,
             },
             Optional = false,

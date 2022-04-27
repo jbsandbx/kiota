@@ -7,6 +7,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
@@ -18,11 +19,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import com.microsoft.kiota.serialization.ParseNode;
 import com.microsoft.kiota.serialization.Parsable;
+import com.microsoft.kiota.serialization.AdditionalDataHolder;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -53,6 +54,15 @@ public class JsonParseNode implements ParseNode {
     }
     public Boolean getBooleanValue() {
         return currentNode.getAsBoolean();
+    }
+    public Byte getByteValue() {
+        return currentNode.getAsByte();
+    }
+    public Short getShortValue() {
+        return currentNode.getAsShort();
+    }
+    public BigDecimal getBigDecimalValue() {
+        return currentNode.getAsBigDecimal();
     }
     public Integer getIntegerValue() {
         return currentNode.getAsInt();
@@ -107,6 +117,12 @@ public class JsonParseNode implements ParseNode {
                             }};
                             if(targetClass == Boolean.class) {
                                 return (T)itemNode.getBooleanValue();
+                            } else if(targetClass == Short.class) {
+                                return (T)itemNode.getShortValue();
+                            } else if(targetClass == Byte.class) {
+                                return (T)itemNode.getByteValue();
+                            } else if(targetClass == BigDecimal.class) {
+                                return (T)itemNode.getBigDecimalValue();
                             } else if(targetClass == String.class) {
                                 return (T)itemNode.getStringValue();
                             } else if(targetClass == Integer.class) {
@@ -234,27 +250,31 @@ public class JsonParseNode implements ParseNode {
         }
         return result;
     }
-    private <T extends Parsable> void assignFieldValues(final T item, final Map<String, BiConsumer<T, ParseNode>> fieldDeserializers) {
+    private <T extends Parsable> void assignFieldValues(final T item, final Map<String, Consumer<ParseNode>> fieldDeserializers) {
         if(currentNode.isJsonObject()) {
             if(this.onBeforeAssignFieldValues != null) {
                 this.onBeforeAssignFieldValues.accept(item);
             }
+            Map<String, Object> itemAdditionalData = null;
+            if(item instanceof AdditionalDataHolder) {
+                itemAdditionalData = ((AdditionalDataHolder)item).getAdditionalData();
+            }
             for (final Map.Entry<String, JsonElement> fieldEntry : currentNode.getAsJsonObject().entrySet()) {
                 final String fieldKey = fieldEntry.getKey();
-                final BiConsumer<? super T, ParseNode> fieldDeserializer = fieldDeserializers.get(fieldKey);
+                final Consumer<ParseNode> fieldDeserializer = fieldDeserializers.get(fieldKey);
                 final JsonElement fieldValue = fieldEntry.getValue();
                 if(fieldValue.isJsonNull())
                     continue;
                 if(fieldDeserializer != null) {
                     final var onBefore = this.onBeforeAssignFieldValues;
                     final var onAfter = this.onAfterAssignFieldValues;
-                    fieldDeserializer.accept(item, new JsonParseNode(fieldValue) {{
+                    fieldDeserializer.accept(new JsonParseNode(fieldValue) {{
                         this.setOnBeforeAssignFieldValues(onBefore);
                         this.setOnAfterAssignFieldValues(onAfter);
                     }});
                 }
-                else
-                    item.getAdditionalData().put(fieldKey, this.tryGetAnything(fieldValue));
+                else if (itemAdditionalData != null)
+                    itemAdditionalData.put(fieldKey, this.tryGetAnything(fieldValue));
             }
             if(this.onAfterAssignFieldValues != null) {
                 this.onAfterAssignFieldValues.accept(item);

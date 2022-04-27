@@ -12,8 +12,14 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
         AddDefaultImports(generatedCode, defaultUsingEvaluators);
         ReplaceIndexersByMethodsWithParameter(generatedCode, generatedCode, false, "ById");
         RemoveCancellationParameter(generatedCode);
-        CorrectCoreType(generatedCode, CorrectMethodType, CorrectPropertyType);
+        CorrectCoreType(generatedCode, CorrectMethodType, CorrectPropertyType, CorrectImplements);
         CorrectCoreTypesForBackingStore(generatedCode, "BackingStoreFactorySingleton.instance.createBackingStore()");
+        AddInnerClasses(generatedCode, 
+            true, 
+            string.Empty,
+            true);
+        DisableActionOf(generatedCode, 
+            CodeParameterKind.QueryParameter);
         AddPropertiesAndMethodTypesImports(generatedCode, true, true, true);
         AliasUsingsWithSameSymbol(generatedCode);
         AddParsableImplementsForModelClasses(generatedCode, "Parsable");
@@ -29,8 +35,16 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
             string.Empty,
             string.Empty);
         AddConstructorsForDefaultValues(generatedCode, true);
-        ReplaceDefaultSerializationModules(generatedCode, "@microsoft/kiota-serialization-json.JsonSerializationWriterFactory");
-        ReplaceDefaultDeserializationModules(generatedCode, "@microsoft/kiota-serialization-json.JsonParseNodeFactory");
+        ReplaceDefaultSerializationModules(
+            generatedCode,
+            "@microsoft/kiota-serialization-json.JsonSerializationWriterFactory",
+            "@microsoft/kiota-serialization-text.TextSerializationWriterFactory"
+        );
+        ReplaceDefaultDeserializationModules(
+            generatedCode,
+            "@microsoft/kiota-serialization-json.JsonParseNodeFactory",
+            "@microsoft/kiota-serialization-text.TextParseNodeFactory"
+        );
         AddSerializationModulesImport(generatedCode,
             new[] { $"{AbstractionsPackageName}.registerDefaultSerializer", 
                     $"{AbstractionsPackageName}.enableBackingStoreForSerializationWriterFactory",
@@ -68,6 +82,9 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
         AddStaticMethodsUsingsForRequestExecutor(
             generatedCode,
             factoryNameCallbackFromType
+        );
+        AddQueryParameterMapperMethod(
+            generatedCode
         );
     }
     private static readonly CodeUsingDeclarationNameComparer usingComparer = new();
@@ -116,21 +133,29 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
             AbstractionsPackageName, "Parsable", "ParsableFactory"),
         new (x => x is CodeClass @class && @class.IsOfKind(CodeClassKind.Model),
             AbstractionsPackageName, "Parsable"),
+        new (x => x is CodeClass @class && @class.IsOfKind(CodeClassKind.Model) && @class.Properties.Any(x => x.IsOfKind(CodePropertyKind.AdditionalData)),
+            AbstractionsPackageName, "AdditionalDataHolder"),
         new (x => x is CodeMethod method && method.IsOfKind(CodeMethodKind.ClientConstructor) &&
                     method.Parameters.Any(y => y.IsOfKind(CodeParameterKind.BackingStore)),
             AbstractionsPackageName, "BackingStoreFactory", "BackingStoreFactorySingleton"),
         new (x => x is CodeProperty prop && prop.IsOfKind(CodePropertyKind.BackingStore),
             AbstractionsPackageName, "BackingStore", "BackedModel", "BackingStoreFactorySingleton" ),
     };
+    private static void CorrectImplements(ProprietableBlockDeclaration block) {
+        block.Implements.Where(x => "IAdditionalDataHolder".Equals(x.Name, StringComparison.OrdinalIgnoreCase)).ToList().ForEach(x => x.Name = x.Name[1..]); // skipping the I
+    }
     private static void CorrectPropertyType(CodeProperty currentProperty) {
         if(currentProperty.IsOfKind(CodePropertyKind.RequestAdapter))
             currentProperty.Type.Name = "RequestAdapter";
         else if(currentProperty.IsOfKind(CodePropertyKind.BackingStore))
             currentProperty.Type.Name = currentProperty.Type.Name[1..]; // removing the "I"
-        else if(currentProperty.IsOfKind(CodePropertyKind.AdditionalData)) {
-            currentProperty.Type.Name = "Map<string, unknown>";
-            currentProperty.DefaultValue = "new Map<string, unknown>()";
-        } else if(currentProperty.IsOfKind(CodePropertyKind.PathParameters)) {
+        else if (currentProperty.IsOfKind(CodePropertyKind.AdditionalData))
+        {
+            currentProperty.Type.Name = "Record<string, unknown>";
+            currentProperty.DefaultValue = "{}";
+        }
+        else if (currentProperty.IsOfKind(CodePropertyKind.PathParameters))
+        {
             currentProperty.Type.IsNullable = false;
             currentProperty.Type.Name = "Record<string, unknown>";
             if(!string.IsNullOrEmpty(currentProperty.DefaultValue))
@@ -147,9 +172,10 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
         }
         else if(currentMethod.IsOfKind(CodeMethodKind.Serializer))
             currentMethod.Parameters.Where(x => x.IsOfKind(CodeParameterKind.Serializer) && x.Type.Name.StartsWith("i", StringComparison.OrdinalIgnoreCase)).ToList().ForEach(x => x.Type.Name = x.Type.Name[1..]);
-        else if(currentMethod.IsOfKind(CodeMethodKind.Deserializer))
-            currentMethod.ReturnType.Name = $"Map<string, (item: T, node: ParseNode) => void>";
-        else if(currentMethod.IsOfKind(CodeMethodKind.ClientConstructor, CodeMethodKind.Constructor)) {
+        else if (currentMethod.IsOfKind(CodeMethodKind.Deserializer))
+            currentMethod.ReturnType.Name = $"Record<string, (node: ParseNode) => void>";
+        else if (currentMethod.IsOfKind(CodeMethodKind.ClientConstructor, CodeMethodKind.Constructor))
+        {
             currentMethod.Parameters.Where(x => x.IsOfKind(CodeParameterKind.RequestAdapter, CodeParameterKind.BackingStore))
                 .Where(x => x.Type.Name.StartsWith("I", StringComparison.InvariantCultureIgnoreCase))
                 .ToList()

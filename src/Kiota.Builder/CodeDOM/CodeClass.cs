@@ -14,6 +14,10 @@ public enum CodeClassKind {
     /// Only used for languages that do not support overloads or optional parameters like go.
     /// </summary>
     ParameterSet,
+    /// <summary>
+    /// A class used as a placeholder for the barrel file.
+    /// </summary>
+    BarrelInitializer,
 }
 /// <summary>
 /// CodeClass represents an instance of a Class to be generated in source code
@@ -37,10 +41,16 @@ public class CodeClass : ProprietableBlock<CodeClassKind, ClassDeclaration>, ITy
             throw new ArgumentOutOfRangeException(nameof(codeClasses));
         return AddRange(codeClasses);
     }
+    public IEnumerable<CodeInterface> AddInnerInterface(params CodeInterface[] codeInterfaces)
+    {
+        if(codeInterfaces == null || codeInterfaces.Any(x => x == null))
+            throw new ArgumentNullException(nameof(codeInterfaces));
+        if(!codeInterfaces.Any())
+            throw new ArgumentOutOfRangeException(nameof(codeInterfaces));
+        return AddRange(codeInterfaces);
+    }
     public CodeClass GetParentClass() {
-        if(StartBlock is ClassDeclaration declaration)
-            return declaration.Inherits?.TypeDefinition as CodeClass;
-        else return null;
+        return StartBlock.Inherits?.TypeDefinition as CodeClass;
     }
     
     public CodeClass GetGreatestGrandparent(CodeClass startClassToSkip = null) {
