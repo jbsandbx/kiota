@@ -869,6 +869,10 @@ public class KiotaBuilder
             }, schema.AnyOf),
             (_, _) => throw new InvalidOperationException("Schema is not oneOf nor anyOf"),
         };
+        unionType.DiscriminatorPropertyName = GetDiscriminatorPropertyName(schema);
+        GetDiscriminatorMappings(currentNode, schema, codeNamespace, null)
+            .ToList()
+            .ForEach(x => unionType.AddDiscriminatorMapping(x.Key, x.Value));
         var membersWithNoName = 0;
         foreach(var currentSchema in schemas) {
             var shortestNamespace = GetShortestNamespace(codeNamespace,currentSchema);
@@ -992,17 +996,42 @@ public class KiotaBuilder
         }).First();
         if(inheritsFrom != null)
             newClass.StartBlock.Inherits = new CodeType { TypeDefinition = inheritsFrom, Name = inheritsFrom.Name };
-        var factoryMethod = AddDiscriminatorMethod(newClass, schema.Discriminator?.PropertyName);
-        if(schema.Discriminator?.Mapping?.Any() ?? false)
-            schema.Discriminator
-                    .Mapping
-                    .Where(x => !x.Key.Equals(schema.Reference?.Id, StringComparison.OrdinalIgnoreCase))
-                    .Select(x => (x.Key, GetCodeTypeForMapping(currentNode, x.Value, currentNamespace, newClass, schema)))
-                    .Where(x => x.Item2 != null)
-                    .ToList()
-                    .ForEach(x => factoryMethod.AddDiscriminatorMapping(x.Key, x.Item2));
+        var factoryMethod = AddDiscriminatorMethod(newClass, GetDiscriminatorPropertyName(schema));
+        GetDiscriminatorMappings(currentNode, schema, currentNamespace, newClass)
+                ?.ToList()
+                .ForEach(x => factoryMethod.AddDiscriminatorMapping(x.Key, x.Value));
         CreatePropertiesForModelClass(currentNode, schema, currentNamespace, newClass);
         return newClass;
+    }
+    private static string GetDiscriminatorPropertyName(OpenApiSchema schema) {
+        if(schema == null)
+            return default;
+        if(schema.Discriminator?.Mapping == null)
+            if(schema.OneOf.Any())
+                return schema.OneOf.Select(static x => GetDiscriminatorPropertyName(x)).FirstOrDefault(static x => !string.IsNullOrEmpty(x));
+            else if (schema.AnyOf.Any())
+                return schema.AnyOf.Select(static x => GetDiscriminatorPropertyName(x)).FirstOrDefault(static x => !string.IsNullOrEmpty(x));
+            else
+                return default;
+
+        return schema.Discriminator.PropertyName;
+    }
+    private IEnumerable<KeyValuePair<string, CodeTypeBase>> GetDiscriminatorMappings(OpenApiUrlTreeNode currentNode, OpenApiSchema schema, CodeNamespace currentNamespace, CodeClass baseClass) {
+        if(schema == null)
+            return null;
+        if(schema.Discriminator?.Mapping == null)
+            if(schema.OneOf.Any())
+                return schema.OneOf.SelectMany(x => GetDiscriminatorMappings(currentNode, x, currentNamespace, baseClass));
+            else if (schema.AnyOf.Any())
+                return schema.AnyOf.SelectMany(x => GetDiscriminatorMappings(currentNode, x, currentNamespace, baseClass));
+            else
+                return null;
+
+        return schema.Discriminator
+                .Mapping
+                .Where(x => !x.Key.Equals(schema.Reference?.Id, StringComparison.OrdinalIgnoreCase))
+                .Select(x => KeyValuePair.Create(x.Key, GetCodeTypeForMapping(currentNode, x.Value, currentNamespace, baseClass, schema)))
+                .Where(static x => x.Value != null);
     }
     public static CodeMethod AddDiscriminatorMethod(CodeClass newClass, string discriminatorPropertyName) {
         var factoryMethod = newClass.AddMethod(new CodeMethod {
@@ -1023,7 +1052,7 @@ public class KiotaBuilder
         factoryMethod.DiscriminatorPropertyName = discriminatorPropertyName;
         return factoryMethod;
     }
-    private CodeTypeBase GetCodeTypeForMapping(OpenApiUrlTreeNode currentNode, string referenceId, CodeNamespace currentNamespace, CodeClass currentClass, OpenApiSchema currentSchema) {
+    private CodeTypeBase GetCodeTypeForMapping(OpenApiUrlTreeNode currentNode, string referenceId, CodeNamespace currentNamespace, CodeClass baseClass, OpenApiSchema currentSchema) {
         var componentKey = referenceId.Replace("#/components/schemas/", string.Empty);
         if(!openApiDocument.Components.Schemas.TryGetValue(componentKey, out var discriminatorSchema)) {
             logger.LogWarning("Discriminator {componentKey} not found in the OpenAPI document.", componentKey);
@@ -1031,7 +1060,7 @@ public class KiotaBuilder
         }
         var className = currentNode.GetClassName(config.StructuredMimeTypes, schema: discriminatorSchema).CleanupSymbolName();
         var shouldInherit = discriminatorSchema.AllOf.Any(x => currentSchema.Reference?.Id.Equals(x.Reference?.Id, StringComparison.OrdinalIgnoreCase) ?? false);
-        var codeClass = AddModelDeclarationIfDoesntExist(currentNode, discriminatorSchema, className, currentNamespace, shouldInherit ? currentClass : null);
+        var codeClass = AddModelDeclarationIfDoesntExist(currentNode, discriminatorSchema, className, currentNamespace, shouldInherit ? baseClass : null);
         return new CodeType {
             Name = codeClass.Name,
             TypeDefinition = codeClass,
