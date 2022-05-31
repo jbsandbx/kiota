@@ -871,7 +871,7 @@ public class KiotaBuilder
         };
         unionType.DiscriminatorInformation.DiscriminatorPropertyName = GetDiscriminatorPropertyName(schema);
         GetDiscriminatorMappings(currentNode, schema, codeNamespace, null)
-            .ToList()
+            ?.ToList()
             .ForEach(x => unionType.DiscriminatorInformation.AddDiscriminatorMapping(x.Key, x.Value));
         var membersWithNoName = 0;
         foreach(var currentSchema in schemas) {
@@ -996,36 +996,33 @@ public class KiotaBuilder
         }).First();
         if(inheritsFrom != null)
             newClass.StartBlock.Inherits = new CodeType { TypeDefinition = inheritsFrom, Name = inheritsFrom.Name };
-        var factoryMethod = AddDiscriminatorMethod(newClass, GetDiscriminatorPropertyName(schema));
-        GetDiscriminatorMappings(currentNode, schema, currentNamespace, newClass)
-                ?.ToList()
-                .ForEach(x => factoryMethod.DiscriminatorInformation.AddDiscriminatorMapping(x.Key, x.Value));
+        AddDiscriminatorMethod(newClass, GetDiscriminatorPropertyName(schema), GetDiscriminatorMappings(currentNode, schema, currentNamespace, newClass));
         CreatePropertiesForModelClass(currentNode, schema, currentNamespace, newClass);
         return newClass;
     }
     private static string GetDiscriminatorPropertyName(OpenApiSchema schema) {
         if(schema == null)
-            return default;
+            return string.Empty;
         if(schema.Discriminator?.Mapping == null)
             if(schema.OneOf.Any())
                 return schema.OneOf.Select(static x => GetDiscriminatorPropertyName(x)).FirstOrDefault(static x => !string.IsNullOrEmpty(x));
             else if (schema.AnyOf.Any())
                 return schema.AnyOf.Select(static x => GetDiscriminatorPropertyName(x)).FirstOrDefault(static x => !string.IsNullOrEmpty(x));
             else
-                return default;
+                return string.Empty;
 
         return schema.Discriminator.PropertyName;
     }
     private IEnumerable<KeyValuePair<string, CodeTypeBase>> GetDiscriminatorMappings(OpenApiUrlTreeNode currentNode, OpenApiSchema schema, CodeNamespace currentNamespace, CodeClass baseClass) {
         if(schema == null)
-            return null;
+            return Enumerable.Empty<KeyValuePair<string, CodeTypeBase>>();
         if(schema.Discriminator?.Mapping == null)
             if(schema.OneOf.Any())
                 return schema.OneOf.SelectMany(x => GetDiscriminatorMappings(currentNode, x, currentNamespace, baseClass));
             else if (schema.AnyOf.Any())
                 return schema.AnyOf.SelectMany(x => GetDiscriminatorMappings(currentNode, x, currentNamespace, baseClass));
             else
-                return null;
+                return Enumerable.Empty<KeyValuePair<string, CodeTypeBase>>();
 
         return schema.Discriminator
                 .Mapping
@@ -1033,7 +1030,7 @@ public class KiotaBuilder
                 .Select(x => KeyValuePair.Create(x.Key, GetCodeTypeForMapping(currentNode, x.Value, currentNamespace, baseClass, schema)))
                 .Where(static x => x.Value != null);
     }
-    public static CodeMethod AddDiscriminatorMethod(CodeClass newClass, string discriminatorPropertyName) {
+    public static CodeMethod AddDiscriminatorMethod(CodeClass newClass, string discriminatorPropertyName, IEnumerable<KeyValuePair<string, CodeTypeBase>> discriminatorMappings) {
         var factoryMethod = newClass.AddMethod(new CodeMethod {
             Name = "CreateFromDiscriminatorValue",
             Description = "Creates a new instance of the appropriate class based on discriminator value",
@@ -1042,6 +1039,8 @@ public class KiotaBuilder
             IsStatic = true,
             IsAsync = false,
         }).First();
+        discriminatorMappings?.ToList()
+                .ForEach(x => factoryMethod.DiscriminatorInformation.AddDiscriminatorMapping(x.Key, x.Value));
         factoryMethod.AddParameter(new CodeParameter {
             Name = "parseNode",
             Kind = CodeParameterKind.ParseNode,
