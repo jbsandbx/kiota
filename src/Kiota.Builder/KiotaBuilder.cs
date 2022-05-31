@@ -869,10 +869,10 @@ public class KiotaBuilder
             }, schema.AnyOf),
             (_, _) => throw new InvalidOperationException("Schema is not oneOf nor anyOf"),
         };
-        unionType.DiscriminatorPropertyName = GetDiscriminatorPropertyName(schema);
+        unionType.DiscriminatorInformation.DiscriminatorPropertyName = GetDiscriminatorPropertyName(schema);
         GetDiscriminatorMappings(currentNode, schema, codeNamespace, null)
             .ToList()
-            .ForEach(x => unionType.AddDiscriminatorMapping(x.Key, x.Value));
+            .ForEach(x => unionType.DiscriminatorInformation.AddDiscriminatorMapping(x.Key, x.Value));
         var membersWithNoName = 0;
         foreach(var currentSchema in schemas) {
             var shortestNamespace = GetShortestNamespace(codeNamespace,currentSchema);
@@ -999,7 +999,7 @@ public class KiotaBuilder
         var factoryMethod = AddDiscriminatorMethod(newClass, GetDiscriminatorPropertyName(schema));
         GetDiscriminatorMappings(currentNode, schema, currentNamespace, newClass)
                 ?.ToList()
-                .ForEach(x => factoryMethod.AddDiscriminatorMapping(x.Key, x.Value));
+                .ForEach(x => factoryMethod.DiscriminatorInformation.AddDiscriminatorMapping(x.Key, x.Value));
         CreatePropertiesForModelClass(currentNode, schema, currentNamespace, newClass);
         return newClass;
     }

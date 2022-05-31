@@ -91,7 +91,7 @@ public class CodeMethodWriter : BaseElementWriter<CodeMethod, CSharpConventionSe
             writer.WriteLines($"var mappingValue = mappingValueNode?.GetStringValue();");
             writer.WriteLine("return mappingValue switch {");
             writer.IncreaseIndent();
-            foreach(var mappedType in codeElement.DiscriminatorMappings) {
+            foreach(var mappedType in codeElement.DiscriminatorInformation.DiscriminatorMappings) {
                 writer.WriteLine($"\"{mappedType.Key}\" => new {mappedType.Value.AllTypes.First().Name.ToFirstCharacterUpperCase()}(),");
             }
             writer.WriteLine($"_ => new {codeElement.Parent.Name.ToFirstCharacterUpperCase()}(),");

@@ -177,7 +177,7 @@ public class GoLanguageRefinerTests {
                 TypeDefinition = parentModel,
             },
         }).First();
-        factoryMethod.AddDiscriminatorMapping("ns.childmodel", new CodeType {
+        factoryMethod.DiscriminatorInformation.AddDiscriminatorMapping("ns.childmodel", new CodeType {
             Name = "childModel",
             TypeDefinition = childModel,
         });
@@ -209,7 +209,7 @@ public class GoLanguageRefinerTests {
                 TypeDefinition = parentModel,
             },
         }).First();
-        factoryMethod.AddDiscriminatorMapping("ns.childmodel", new CodeType {
+        factoryMethod.DiscriminatorInformation.AddDiscriminatorMapping("ns.childmodel", new CodeType {
             Name = "childModel",
             TypeDefinition = childModel,
         });

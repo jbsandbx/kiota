@@ -192,8 +192,8 @@ public abstract class CommonLanguageRefiner : ILanguageRefiner
                 currentMethod.Name = replacement.Invoke(currentMethod.Name);
             if(currentMethod.ErrorMappings.Select(x => x.Value.Name).Any(x => provider.ReservedNames.Contains(x)))
                 ReplaceMappingNames(currentMethod.ErrorMappings, provider, replacement);
-            if(currentMethod.DiscriminatorMappings.Select(x => x.Value.Name).Any(x => provider.ReservedNames.Contains(x)))
-                ReplaceMappingNames(currentMethod.DiscriminatorMappings, provider, replacement);
+            if(currentMethod.DiscriminatorInformation.DiscriminatorMappings.Select(x => x.Value.Name).Any(x => provider.ReservedNames.Contains(x)))
+                ReplaceMappingNames(currentMethod.DiscriminatorInformation.DiscriminatorMappings, provider, replacement);
             ReplaceReservedParameterNamesTypes(currentMethod, provider, replacement);
         } else if (current is CodeProperty currentProperty &&
                 isNotInExceptions &&
@@ -371,7 +371,7 @@ public abstract class CommonLanguageRefiner : ILanguageRefiner
             newClass.Kind = CodeClassKind.Model;
         }
         // Add the discriminator function to the wrapper as it will be referenced. 
-        var factoryMethod = KiotaBuilder.AddDiscriminatorMethod(newClass, codeUnionType.DiscriminatorPropertyName);
+        var factoryMethod = KiotaBuilder.AddDiscriminatorMethod(newClass, codeUnionType.DiscriminatorInformation.DiscriminatorPropertyName);
         //TODO mappings
         return new CodeType {
             Name = newClass.Name,
@@ -622,9 +622,9 @@ public abstract class CommonLanguageRefiner : ILanguageRefiner
             currentMethod.Parent is CodeClass parentClass &&
             parentClass.StartBlock is ClassDeclaration declaration) {
                 if(currentMethod.IsOfKind(CodeMethodKind.Factory) &&
-                    currentMethod.DiscriminatorMappings != null) {
+                    currentMethod.DiscriminatorInformation.DiscriminatorMappings != null) {
                         if(addUsings)
-                            declaration.AddUsings(currentMethod.DiscriminatorMappings
+                            declaration.AddUsings(currentMethod.DiscriminatorInformation.DiscriminatorMappings
                                 .Select(x => x.Value)
                                 .OfType<CodeType>()
                                 .Where(x => x.TypeDefinition != null)
